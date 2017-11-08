@@ -1,10 +1,12 @@
+from __future__ import absolute_import, division, print_function
+
 import pytest
 import torch
 from torch.autograd import Variable
 
 import pyro
 import pyro.infer
-from pyro.distributions import DiagNormal, Bernoulli
+from pyro.distributions import Bernoulli, Normal
 from tests.common import TestCase
 
 
@@ -17,7 +19,7 @@ class HMMSamplingTestCase(TestCase):
             p_latent = pyro.param("p1", Variable(torch.Tensor([[0.7], [0.3]])))
             p_obs = pyro.param("p2", Variable(torch.Tensor([[0.9], [0.1]])))
 
-            latents = [Variable(torch.ones(1))]
+            latents = [Variable(torch.ones(1, 1))]
             observes = []
             for t in range(self.model_steps):
 
@@ -32,7 +34,7 @@ class HMMSamplingTestCase(TestCase):
             return torch.sum(torch.cat(latents))
 
         self.model_steps = 3
-        self.data = [pyro.ones(1) for i in range(self.model_steps)]
+        self.data = [pyro.ones(1, 1) for _ in range(self.model_steps)]
         self.model = model
 
 
@@ -40,18 +42,18 @@ class NormalNormalSamplingTestCase(TestCase):
 
     def setUp(self):
 
-        pyro._param_store.clear()
+        pyro.clear_param_store()
 
         def model():
-            mu = pyro.sample("mu", DiagNormal(Variable(torch.zeros(1)),
-                                              Variable(torch.ones(1))))
-            xd = DiagNormal(mu, Variable(torch.ones(1)), batch_size=50)
+            mu = pyro.sample("mu", Normal(Variable(torch.zeros(1)),
+                                          Variable(torch.ones(1))))
+            xd = Normal(mu, Variable(torch.ones(1)), batch_size=50)
             pyro.observe("xs", xd, self.data)
             return mu
 
         def guide():
-            return pyro.sample("mu", DiagNormal(Variable(torch.zeros(1)),
-                                                Variable(torch.ones(1))))
+            return pyro.sample("mu", Normal(Variable(torch.zeros(1)),
+                                            Variable(torch.ones(1))))
 
         # data
         self.data = Variable(torch.zeros(50, 1))
@@ -76,18 +78,20 @@ class SearchTest(HMMSamplingTestCase):
 
         tr_latents = set()
         for tr, _ in posterior._traces():
-            tr_latents.add(tuple([tr[name]["value"].view(-1).data[0] for name in tr
-                                  if tr[name]["type"] == "sample"]))
+            tr_latents.add(tuple([tr.nodes[name]["value"].view(-1).data[0]
+                                  for name in tr.nodes.keys()
+                                  if tr.nodes[name]["type"] == "sample" and
+                                  not tr.nodes[name]["is_observed"]]))
 
         assert true_latents == tr_latents
 
     def test_marginal(self):
         posterior = pyro.infer.Search(self.model)
         marginal = pyro.infer.Marginal(posterior)
-        dd = marginal._dist()
+        d, values = marginal._dist_and_values()
 
         tr_rets = []
-        for v in dd.vs:
+        for v in values:
             tr_rets.append(v.view(-1).data[0])
 
         assert len(tr_rets) == 4

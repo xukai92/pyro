@@ -1,15 +1,21 @@
+from __future__ import absolute_import, division, print_function
+
+from collections import namedtuple
+
 from .poutine import Poutine
+
+CondIndepStackFrame = namedtuple("CondIndepStackFrame", ["name", "counter", "vectorized"])
 
 
 class LambdaPoutine(Poutine):
     """
     This poutine has two functions:
-    (i)  handle score-rescaling
-    (ii) keep track of stack of nested map_datas at each sample/observe site
-         for the benefit of TraceGraphPoutine;
-         necessary information passed via map_data_stack in msg
+        (i)  handle score-rescaling
+        (ii) keep track of stack of nested map_datas at each sample/observe site
+             for the benefit of TracePoutine;
+             necessary information passed via map_data_stack in msg
     """
-    def __init__(self, fn, name, scale, map_data_type, batch_dim, batch_size):
+    def __init__(self, fn, name, scale, vectorized):
         """
         Constructor: basically default, but store an extra scalar self.scale
         and a counter to keep track of which (list) map_data branch we're in
@@ -17,9 +23,7 @@ class LambdaPoutine(Poutine):
         self.name = name
         self.scale = scale
         self.counter = 0
-        self.map_data_type = map_data_type
-        self.batch_dim = batch_dim
-        self.batch_size = batch_size
+        self.vectorized = vectorized
         super(LambdaPoutine, self).__init__(fn)
 
     def __enter__(self):
@@ -31,13 +35,11 @@ class LambdaPoutine(Poutine):
 
     def _prepare_site(self, msg):
         """
-        construct the message that is consumed by TraceGraphPoutine;
+        construct the message that is consumed by TracePoutine;
         map_data_stack encodes the nested sequence of map_data branches
         that the site at name is within
         note: the map_data_stack ordering is innermost to outermost from left to right
         """
         msg["scale"] = self.scale * msg["scale"]
-        if len(msg['map_data_stack']) == 0 or msg['map_data_stack'][0] != self.name:
-            msg['map_data_stack'].insert(0, (self.name, self.counter,
-                                             self.map_data_type, self.batch_dim, self.batch_size))
+        msg["map_data_stack"].insert(0, CondIndepStackFrame(self.name, self.counter, self.vectorized))
         return msg

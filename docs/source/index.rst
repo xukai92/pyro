@@ -21,6 +21,7 @@ Pyro Documentation
    parameters
    nn
    optimization
+   advanced
 
 
 Indices and tables

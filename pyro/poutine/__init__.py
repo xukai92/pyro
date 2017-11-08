@@ -1,55 +1,43 @@
+from __future__ import absolute_import, division, print_function
+
 import functools
 from six.moves.queue import LifoQueue
 
-# poutines
-from .block_poutine import BlockPoutine
-from .poutine import Poutine  # noqa: F401
-from .branch_poutine import BranchPoutine
-from .replay_poutine import ReplayPoutine
-from .trace_poutine import TracePoutine
-from .tracegraph_poutine import TraceGraphPoutine
-from .lift_poutine import LiftPoutine
-from .condition_poutine import ConditionPoutine
-from .lambda_poutine import LambdaPoutine  # noqa: F401
-from .escape_poutine import EscapePoutine
-
-# trace data structures
-from .trace import Trace, TraceGraph  # noqa: F401
 from pyro import util
 
+# poutines
+from .block_poutine import BlockPoutine
+from .branch_poutine import BranchPoutine
+from .condition_poutine import ConditionPoutine
+from .escape_poutine import EscapePoutine
+from .lambda_poutine import LambdaPoutine  # noqa: F401
+from .lift_poutine import LiftPoutine
+from .poutine import _PYRO_STACK, Poutine  # noqa: F401
+from .replay_poutine import ReplayPoutine
+from .trace import Trace  # noqa: F401
+from .trace_poutine import TracePoutine
 
 ############################################
 # Begin primitive operations
 ############################################
 
-def trace(fn):
+
+def trace(fn, graph_type=None):
     """
     :param fn: a stochastic function (callable containing pyro primitive calls)
+    :param graph_type: string that specifies the kind of graph to construct
     :returns: stochastic function wrapped in a TracePoutine
     :rtype: pyro.poutine.TracePoutine
 
     Alias for TracePoutine constructor.
 
     Given a callable that contains Pyro primitive calls, return a TracePoutine callable
-    that records the inputs and outputs to those primitive calls.
+    that records the inputs and outputs to those primitive calls
+    and their dependencies.
+
     Adds trace data structure site constructors to primitive stacks
     """
-    return TracePoutine(fn)
-
-
-def tracegraph(fn):
-    """
-    :param fn: a stochastic function (callable containing pyro primitive calls)
-    :returns: stochastic function wrapped in a TraceGraphPoutine
-    :rtype: pyro.poutine.TraceGraphPoutine
-
-    Alias for TraceGraphPoutine constructor.
-
-    Given a callable that contains Pyro primitive calls,, return a TraceGraphPoutine callable
-    that records the inputs and outputs to those primitive calls and their dependencies.
-    Adds trace and tracegraph data structure site constructors to primitive stacks
-    """
-    return TraceGraphPoutine(fn)
+    return TracePoutine(fn, graph_type=graph_type)
 
 
 def replay(fn, trace, sites=None):
@@ -201,6 +189,8 @@ def queue(fn, queue, max_tries=None,
                                    functools.partial(escape_fn, next_trace)))
                 return ftr(*args, **kwargs)
             except util.NonlocalExit as site_container:
+                for frame in _PYRO_STACK:
+                    frame._reset()
                 for tr in extend_fn(ftr.trace.copy(), site_container.site,
                                     num_samples=num_samples):
                     queue.put(tr)
@@ -259,9 +249,9 @@ def branch_discrete(fn):
     Examples:
 
         >>> def gaussian_mixture_model():
-                ps = pyro.get_param("ps", Variable(torch.ones(10) / 10))
-                mus = pyro.get_param("mus", Variable(torch.zeros(10))
-                sigma = pyro.get_param("sigma", Variable(torch.ones(1))
+                ps = pyro.param("ps", Variable(torch.ones(10) / 10))
+                mus = pyro.param("mus", Variable(torch.zeros(10))
+                sigma = pyro.param("sigma", Variable(torch.ones(1))
                 z = pyro.sample("z", dist.categorical, ps, one_hot=False)
                 x = pyro.samples("x", dist.diagnormal, mus[z], sigma)
                 return x

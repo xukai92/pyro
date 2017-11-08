@@ -1,5 +1,4 @@
-import json
-import os
+from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import scipy.stats as sp
@@ -7,7 +6,7 @@ import torch
 from torch.autograd import Variable
 
 import pyro.distributions as dist
-from tests.common import RESOURCE_DIR, TestCase
+from tests.common import TestCase, assert_equal
 
 
 class TestCategorical(TestCase):
@@ -36,56 +35,79 @@ class TestCategorical(TestCase):
 
         self.n_samples = 50000
 
-        with open(os.path.join(RESOURCE_DIR, 'support_categorical.json')) as data_file:
-            data = json.load(data_file)
-        self.support = [torch.Tensor(x) for x in data['one_hot']]
-        self.nhot_support = list(map(lambda x: torch.Tensor(x), data['not_hot']))
-        self.discrete_support = list(map(lambda x: torch.Tensor(x), data['discrete']))
-        self.discrete_arr_support = data['discrete_arr']
+        self.support_one_hot_non_vec = torch.Tensor([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.support_one_hot = torch.Tensor([[[1, 0, 0], [1, 0, 0]],
+                                             [[0, 1, 0], [0, 1, 0]],
+                                             [[0, 0, 1], [0, 0, 1]]])
+        self.support_non_vec = torch.LongTensor([[0], [1], [2]])
+        self.support = torch.LongTensor([[[0], [0]], [[1], [1]], [[2], [2]]])
+        self.discrete_support_non_vec = torch.Tensor([[0], [1], [2]])
+        self.discrete_support = torch.Tensor([[[0], [3]], [[1], [4]], [[2], [5]]])
+        self.discrete_arr_support_non_vec = [['a'], ['b'], ['c']]
+        self.discrete_arr_support = [[['a'], ['d']], [['b'], ['e']], [['c'], ['f']]]
 
     def test_nhot_log_pdf(self):
         log_px_torch = dist.categorical.batch_log_pdf(self.test_data_nhot,
                                                       self.ps,
-                                                      one_hot=False,
-                                                      batch_size=1).data[0][0]
-        log_px_np = float(sp.multinomial.logpmf(np.array([0, 0, 1]), 1, self.ps.data.numpy()))
+                                                      one_hot=False).data[0]
+        log_px_np = float(sp.multinomial.logpmf(np.array([0, 0, 1]), 1, self.ps.data.cpu().numpy()))
         self.assertEqual(log_px_torch, log_px_np, prec=1e-4)
 
     def test_mean_and_var(self):
-        torch_samples = [dist.categorical(self.ps, one_hot=False, batch_size=1).data.numpy()
+        torch_samples = [dist.categorical(self.ps, one_hot=False).data.cpu().numpy()
                          for _ in range(self.n_samples)]
         _, counts = np.unique(torch_samples, return_counts=True)
         computed_mean = float(counts[0]) / self.n_samples
-        self.assertEqual(computed_mean, self.analytic_mean.data.numpy()[0], prec=0.05)
+        self.assertEqual(computed_mean, self.analytic_mean.data.cpu().numpy()[0], prec=0.05)
 
     def test_discrete_log_pdf(self):
         log_px_torch = dist.categorical.batch_log_pdf(self.d_test_data, self.d_ps, self.d_vs).data[0][0]
-        log_px_np = float(sp.multinomial.logpmf(np.array([1, 0, 0]), 1, self.d_ps[0].data.numpy()))
+        log_px_np = float(sp.multinomial.logpmf(np.array([1, 0, 0]), 1, self.d_ps[0].data.cpu().numpy()))
         log_px_torch2 = dist.categorical.batch_log_pdf(self.d_test_data, self.d_ps, self.d_vs).data[1][0]
-        log_px_np2 = float(sp.multinomial.logpmf(np.array([0, 0, 1]), 1, self.d_ps[1].data.numpy()))
+        log_px_np2 = float(sp.multinomial.logpmf(np.array([0, 0, 1]), 1, self.d_ps[1].data.cpu().numpy()))
         self.assertEqual(log_px_torch, log_px_np, prec=1e-4)
         self.assertEqual(log_px_torch2, log_px_np2, prec=1e-4)
 
     def test_discrete_arr_logpdf(self):
         log_px_torch = dist.categorical.batch_log_pdf(self.d_v_test_data,
-                                                      self.d_ps, self.d_vs_arr).data[0][0]
-        log_px_np = float(sp.multinomial.logpmf(np.array([1, 0, 0]), 1, self.d_ps[0].data.numpy()))
+                                                      self.d_ps,
+                                                      self.d_vs_arr).data[0][0]
+        log_px_np = float(sp.multinomial.logpmf(np.array([1, 0, 0]), 1, self.d_ps[0].data.cpu().numpy()))
         log_px_torch2 = dist.categorical.batch_log_pdf(self.d_v_test_data,
-                                                       self.d_ps, self.d_vs_arr).data[1][0]
-        log_px_np2 = float(sp.multinomial.logpmf(np.array([0, 0, 1]), 1, self.d_ps[1].data.numpy()))
+                                                       self.d_ps,
+                                                       self.d_vs_arr).data[1][0]
+        log_px_np2 = float(sp.multinomial.logpmf(np.array([0, 0, 1]), 1, self.d_ps[1].data.cpu().numpy()))
         self.assertEqual(log_px_torch, log_px_np, prec=1e-4)
         self.assertEqual(log_px_torch2, log_px_np2, prec=1e-4)
 
+    def test_one_hot_support_non_vectorized(self):
+        s = dist.categorical.enumerate_support(self.d_ps[0].squeeze(0))
+        assert_equal(s.data, self.support_one_hot_non_vec)
+
+    def test_one_hot_support(self):
+        s = dist.categorical.enumerate_support(self.d_ps)
+        assert_equal(s.data, self.support_one_hot)
+
+    def test_discrete_support_non_vectorized(self):
+        s = dist.categorical.enumerate_support(self.d_ps[0].squeeze(0), self.d_vs[0].squeeze(0))
+        assert_equal(s.data, self.discrete_support_non_vec)
+
     def test_discrete_support(self):
-        s = list(dist.categorical.support(self.d_ps, self.d_vs))
-        v = [torch.equal(x.data, y) for x, y in zip(s, self.discrete_support)]
-        assert all(v)
+        s = dist.categorical.enumerate_support(self.d_ps, self.d_vs)
+        assert_equal(s.data, self.discrete_support)
+
+    def test_discrete_arr_support_non_vectorized(self):
+        s = dist.categorical.enumerate_support(self.d_ps[0].squeeze(0), self.d_vs_arr[0]).tolist()
+        assert_equal(s, self.discrete_arr_support_non_vec)
 
     def test_discrete_arr_support(self):
-        s = list(dist.categorical.support(self.d_ps, self.d_vs_arr))
-        assert s == self.discrete_arr_support
+        s = dist.categorical.enumerate_support(self.d_ps, self.d_vs_arr).tolist()
+        assert_equal(s, self.discrete_arr_support)
 
-    def test_nhot_support(self):
-        s = list(dist.categorical.support(self.batch_ps, one_hot=False))
-        v = [torch.equal(x.data, y) for x, y in zip(s, self.nhot_support)]
-        assert all(v)
+    def test_support_non_vectorized(self):
+        s = dist.categorical.enumerate_support(self.batch_ps[0].squeeze(0), one_hot=False)
+        assert_equal(s.data, self.support_non_vec)
+
+    def test_support(self):
+        s = dist.categorical.enumerate_support(self.batch_ps, one_hot=False)
+        assert_equal(s.data, self.support)
