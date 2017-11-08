@@ -597,7 +597,7 @@ class BranchPoutineTests(TestCase):
             sigma = Variable(torch.ones(1))
 
             w = pyro.sample("w", Bernoulli(ps))
-            x = pyro.sample("x", DiagNormal(mus[w], sigma))
+            x = pyro.sample("x", Normal(mus[w], sigma))
             return dict(w=w, x=x)
 
         result = model()
@@ -624,9 +624,9 @@ class BranchPoutineTests(TestCase):
             sigma = Variable(torch.ones(1))
 
             w = pyro.sample("w", Bernoulli(ps))
-            x = pyro.sample("x", DiagNormal(mus[w], sigma))
+            x = pyro.sample("x", Normal(mus[w], sigma))
             y = pyro.sample("y", Bernoulli(qs[w]))
-            z = pyro.sample("z", DiagNormal(mus[y], sigma))
+            z = pyro.sample("z", Normal(mus[y], sigma))
             return dict(w=w, x=x, y=y, z=z)
 
         result = model()
@@ -659,10 +659,10 @@ class BranchPoutineTests(TestCase):
             sigma = Variable(torch.ones(1))
 
             w = pyro.sample("w", Bernoulli(ps))
-            x = pyro.sample("x", DiagNormal(mus[w], sigma))
+            x = pyro.sample("x", Normal(mus[w], sigma))
             y = pyro.sample("y", Bernoulli(qs))
             mu = mus[y] + mus[w]  # Conflict here.
-            z = pyro.sample("z", DiagNormal(mu, sigma))
+            z = pyro.sample("z", Normal(mu, sigma))
             return dict(w=w, x=x, y=y, z=z)
 
         result = model()
