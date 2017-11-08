@@ -21,15 +21,15 @@ class BranchPoutine(Poutine):
         if msg["done"]:
             return msg["ret"]
 
-        # Sample as usual if fn is not enumerable (e.g. is continuous).
+        # Sample as usual if site is observed or fn is not enumerable (e.g. is continuous).
         fn = msg["fn"]
-        if not getattr(fn, "enumerable", False):
+        if msg["is_observed"] or not getattr(fn, "enumerable", False):
             return super(BranchPoutine, self)._pyro_sample(self, msg)
 
-        # Expand val by one batch dim and set a vectorized scale.
+        # Expand val by one batch dim on the left and set a vectorized scale.
         args, kwargs = msg["args"], msg["kwargs"]
-        val = torch.stack(fn.support(*args, **kwargs))
-        log_pdf = fn.batch_log_pdf(val, *args, **kwargs)
+        val = fn.support(*args, **kwargs)
+        log_pdf = fn.batch_log_pdf(val, *args, **kwargs).detach()
         msg["scale"] = msg["scale"] * torch.exp(log_pdf)
 
         msg["done"] = True

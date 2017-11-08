@@ -592,11 +592,11 @@ class BranchPoutineTests(TestCase):
 
         # Model with 1 discrete + 1 continuous variables.
         def model():
-            ps = Variable(torch.Tensor([0.5, 0.5]))
+            ps = Variable(torch.Tensor([0.5]))
             mus = Variable(torch.Tensor([-1, 1]))
             sigma = Variable(torch.ones(1))
 
-            w = pyro.sample("w", Bernoulli(ps))
+            w = pyro.sample("w", Bernoulli(ps)).long()
             x = pyro.sample("x", Normal(mus[w], sigma))
             return dict(w=w, x=x)
 
@@ -621,9 +621,9 @@ class BranchPoutineTests(TestCase):
             qs = Variable(torch.Tensor([[0.8, 0.1, 0.1],
                                         [0.1, 0.8, 0.1]]))
             mus = Variable(torch.Tensor([-1, 1]))
-            sigma = Variable(torch.ones(1))
+            sigma = Variable(torch.ones(2))
 
-            w = pyro.sample("w", Bernoulli(ps))
+            w = pyro.sample("w", Bernoulli(ps)).long()
             x = pyro.sample("x", Normal(mus[w], sigma))
             y = pyro.sample("y", Bernoulli(qs[w]))
             z = pyro.sample("z", Normal(mus[y], sigma))
@@ -656,9 +656,9 @@ class BranchPoutineTests(TestCase):
             ps = Variable(torch.Tensor([0.5, 0.5]))
             qs = Variable(torch.Tensor([0.8, 0.1, 0.1]))
             mus = Variable(torch.Tensor([-1, 1]))
-            sigma = Variable(torch.ones(1))
+            sigma = Variable(torch.ones(2))
 
-            w = pyro.sample("w", Bernoulli(ps))
+            w = pyro.sample("w", Bernoulli(ps)).long()
             x = pyro.sample("x", Normal(mus[w], sigma))
             y = pyro.sample("y", Bernoulli(qs))
             mu = mus[y] + mus[w]  # Conflict here.
